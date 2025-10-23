@@ -1,0 +1,172 @@
+  # YAML anchors so we don't repeat env everywhere
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+  UMASK: ${UMASK}
+
+services:
+  nordvpn:
+    image: azinchen/nordvpn:latest
+    container_name: nordvpn
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun]
+    environment:
+      <<: *common-env
+      USER: ${NORD_USER}
+      PASS: ${NORD_PASS}
+      COUNTRY: CA;38;US;228
+      GROUP: Standard VPN servers
+      RANDOM_TOP: 10
+      NETWORK: 10.0.0.0/24;192.168.1.0/24;172.20.0.0/16;172.24.0.0/16
+      RECREATE_VPN_CRON: 0 */6 * * *
+      OPENVPN_OPTS: --mute-replay-warnings --pull-filter ignore "ping-restart" --ping-exit 180
+      PERSIST_TUN: 1
+      DNS: 1.1.1.1,8.8.8.8
+    ports:
+      - 8282:80
+      - ${QBIT_WEBUI_PORT}:8080
+      - ${QBIT_TCP_PORT}:6881/tcp
+      - ${QBIT_UDP_PORT}:6881/udp
+    networks:
+      - media-network
+    restart: unless-stopped
+
+  plex:
+    image: linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    cap_add: [SYS_NICE]
+    ports:
+      - "32400:32400/tcp"
+      - "3005:3005/tcp"
+      - "8324:8324/tcp"
+      - "32469:32469/tcp"
+      - "1900:1900/udp"
+      - "32410:32410/udp"
+      - "32412:32412/udp"
+      - "32413:32413/udp"
+      - "32414:32414/udp"
+    environment:
+      <<: *common-env
+      VERSION: docker
+      PLEX_CLAIM: claim-o4ZBfzhx6Q_Gw2jh7Lyr
+    volumes:
+      - ${CONFIG_ROOT}/plex:/config
+      - ${MEDIA_ROOT}/TV:/tv
+      - ${MEDIA_ROOT}/Movies:/movies
+      - ${TRANSCODE_DIR}:/transcode
+    group_add: [video]
+    devices:
+      - /dev/dri
+    network_mode: host
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:nordvpn"
+    depends_on: [nordvpn]
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      WEBUI_PORT: "${QBIT_WEBUI_PORT}"
+    volumes:
+      - ${CONFIG_ROOT}/qbittorrent:/config
+      - ${MEDIA_ROOT}/downloading:/downloads
+      - ${MEDIA_ROOT}/TV:/TV
+      - ${MEDIA_ROOT}/Movies:/Movies
+
+  radarr:
+    container_name: radarr
+    image: lscr.io/linuxserver/radarr:latest
+    restart: unless-stopped
+    ports:
+      - "${RADARR_PORT}:7878"
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG_ROOT}/radarr:/config
+      - ${MEDIA_ROOT}/Movies:/movies
+      - ${MEDIA_ROOT}/downloading:/downloads
+    depends_on: [qbittorrent]
+    networks: [media-network]
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    ports:
+      - "${SONARR_PORT}:8989"
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG_ROOT}/sonarr:/config
+      - ${MEDIA_ROOT}/TV:/tv
+      - ${MEDIA_ROOT}/downloading:/downloads
+    depends_on: [qbittorrent]
+    networks: [media-network]
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG_ROOT}/jackett:/config
+    ports:
+      - "${JACKETT_PORT}:9117"
+    networks: [media-network]
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG_ROOT}/bazarr:/config
+    ports:
+      - "${BAZARR_PORT}:6767"
+    networks: [media-network]
+
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    container_name: overseerr
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      LOG_LEVEL: info
+    ports:
+      - "${OVERSEERR_PORT}:5055"  # Overseerr's default port
+    volumes:
+      - ${CONFIG_ROOT}/overseerr:/config
+    networks: [media-network]
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG_ROOT}/prowlarr:/config
+    ports:
+      - "${PROWLARR_PORT}:9696"
+    networks: [media-network]
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      LOG_LEVEL: info
+      BROWSER_TIMEOUT: 60000       # 60s
+    ports:
+      - "8191:8191"
+    networks: [media-network]
+
+networks:
+  media-network:
+    driver: bridge
