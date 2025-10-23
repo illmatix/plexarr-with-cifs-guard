@@ -1,4 +1,6 @@
-# Media Stack (Plex/Sonarr/Radarr) — Host Mount + Docker Startup Guide
+# Plexarr Media Stack — Plex / Sonarr / Radarr / qBittorrent / Jackett / Prowlarr / Bazarr / Overseerr (+ VPN)
+
+This repository contains a self-hosted media automation stack built with Docker Compose. It covers the full pipeline: discovery via indexers (Jackett/Prowlarr), request management (Overseerr), automated grabs and seeding (qBittorrent running behind a VPN), library organization (Sonarr/Radarr), subtitles (Bazarr), and playback/streaming (Plex with hardware transcoding). Flaresolverr is included to help indexers navigate anti-bot pages, and the stack standardizes container paths (`/tv`, `/movies`, `/downloads`) for predictable moves/imports across services.
 
 This README explains how to ensure your NAS share is mounted **before** Docker starts, so containers bind the **actual network share** and not an empty local directory. It also includes pre/post Docker checks and a debugging checklist.
 
